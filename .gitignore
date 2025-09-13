@@ -8,6 +8,8 @@ __pycache__/
 
 .vscode/
 
+profiler_out/
+
 data/
 scripts/
 
