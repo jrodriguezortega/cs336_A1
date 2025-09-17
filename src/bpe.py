@@ -1,7 +1,9 @@
 from collections import defaultdict
 
 import regex as re
-from multiprocessing import Pool
+import multiprocessing as mp
+import os
+import json
 
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 
@@ -255,7 +257,7 @@ def pretokenize_text_parallel(text, special_tokens):
 
     pretoken_counts = defaultdict(int)
     # Pre-tokenize and obtain the initial pretoken_counts
-    with Pool(MAX_THREADS) as p:
+    with mp.Pool(mp.cpu_count()) as p:
         small_pretoken_counts = p.map(get_pretoken_count, split_text)
 
     for small_pretoken_count in small_pretoken_counts:
@@ -373,29 +375,43 @@ def train_bpe(
     return vocab, merges
 
 
-if __name__ == "__main__":
-    import os
-    import time
+def save_vocab_merges(vocab: dict[int, bytes], merges: list[tuple[bytes, bytes]], dir_path: str, name: str):
+    """Function to save vocabulary and merges of a trained BPE tokenizer
 
-    PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+    Args:
+        vocab (dict[int, bytes]): Vocabulary.
+        merges (list[tuple[bytes, bytes]]): Merges.
+        dir_path (str): Directory to save the vocabulary and merges.
+        name (str): Name to identify the trained BPE tokenizer.
+    """
 
-    # long_text = "<|endoftext|> Once you have a vocabulary, you could, in principle, count how often bytes occur next \
-    # to each other in your text and begin merging them starting with the most frequent pair of bytes. However, \
-    # this is quite computationally expensive, since we’d have to go take a full pass over the corpus each time \
-    # we merge. In addition, directly merging bytes across the corpus may result in tokens that differ only in \
-    # punctuation <|endoftext|>"
+    os.makedirs(dir_path, exist_ok=True)
 
-    # print(re.findall(PAT, "some text that i'll pre-tokenize"))
+    vocab_json_path = os.path.join(dir_path, f"{name}-vocab.json")
+    merges_txt_path = os.path.join(dir_path, f"{name}-merges.txt")
 
-    # print(re.findall(PAT, long_text))
-    FIXTURES = "/Users/jrodriguez/Documentos/personal_projects/cs336/assignment1-basics/tests/fixtures"
+    with open(vocab_json_path, "w", encoding="utf-8") as f:
+        vocab_str = {str(vocab_item): vocab_idx for vocab_idx, vocab_item in vocab.items()}
+        json.dump(vocab_str, f, indent=2)
 
-    input_path = os.path.join(FIXTURES, "tinystories_sample_5M.txt")  # "tinystories_sample_5M.txt"
-    start_time = time.time()
-    vocab, merges = train_bpe(
-        input_path=input_path,
-        vocab_size=500,
-        special_tokens=["<|endoftext|>"],
-    )
-    end_time = time.time()
-    print(f"Elapsed time: {end_time - start_time:.3f}s")
+    with open(merges_txt_path, "w", encoding="utf-8") as f:
+        for merge in merges:
+            f.write(f"{str(merge)}\n")
+
+
+def read_vocab_merges(dir_path: str, name: str):
+    vocab_json_path = os.path.join(dir_path, f"{name}-vocab.json")
+    merges_txt_path = os.path.join(dir_path, f"{name}-merges.txt")
+
+    with open(vocab_json_path, "r", encoding="utf-8") as f:
+        vocab_str_dict = json.load(f)
+
+        vocab = {vocab_idx: eval(vocab_str) for vocab_str, vocab_idx in vocab_str_dict.items()}
+
+    with open(merges_txt_path, "r", encoding="utf-8") as f:
+        # merges_lines = f.readlines()
+        merges = []
+        for line in f:
+            merges.append(eval(line))
+
+    return vocab, merges
