@@ -10,7 +10,8 @@ tmp.py
 
 .vscode/
 profiler_out/
-
+mprofile*
+bpe_tokenizer/
 data/
 scripts/
 

@@ -50,6 +50,8 @@ line-length = 120
 
 [dependency-groups]
 dev = [
+    "matplotlib>=3.10.6",
+    "memory-profiler>=0.61.0",
     "pyinstrument>=5.1.1",
 ]
 
