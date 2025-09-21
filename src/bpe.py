@@ -5,6 +5,8 @@ import multiprocessing as mp
 import os
 import json
 
+from memory_profiler import profile
+
 from src.pretokenization import find_chunk_boundaries
 
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
@@ -225,7 +227,8 @@ def pretokenize_text_binary(file_path, special_tokens):
         split_special_token (_type_): _description_
     """
 
-    num_processes = mp.cpu_count()
+    num_processes = 20  # mp.cpu_count()
+    pretoken_counts = defaultdict(int)
     with open(file_path, "rb") as f:
         boundaries = find_chunk_boundaries(f, num_processes, b"<|endoftext|>")
 
@@ -235,13 +238,15 @@ def pretokenize_text_binary(file_path, special_tokens):
             chunk = f.read(end - start).decode("utf-8", errors="ignore")
             chunks.append(chunk)
 
-    with mp.Pool(mp.cpu_count()) as p:
-        small_pretoken_counts = p.starmap(pretokenize_text_2, [(chunk, special_tokens) for chunk in chunks])
+            if len(chunks) == mp.cpu_count() or end == boundaries[-1]:
+                with mp.Pool(mp.cpu_count()) as p:
+                    small_pretoken_counts = p.starmap(pretokenize_text_2, [(chunk, special_tokens) for chunk in chunks])
 
-    pretoken_counts = defaultdict(int)
-    for small_pretoken_count in small_pretoken_counts:
-        for pretoken, count in small_pretoken_count.items():
-            pretoken_counts[pretoken] += count
+                for small_pretoken_count in small_pretoken_counts:
+                    for pretoken, count in small_pretoken_count.items():
+                        pretoken_counts[pretoken] += count
+
+                chunks = []
 
     idx_to_pretoken_counts = {
         idx: {"pretoken": pretoken, "counts": counts} for idx, (pretoken, counts) in enumerate(pretoken_counts.items())
@@ -368,8 +373,6 @@ def train_bpe(
             pairs_counts[byte_pair] += count
             pairs_tokens[byte_pair][idx] = True
 
-    del counts
-    del byte_pair_count
     # Merge pairs until you reach vocab_size vocabulary size
     while len(vocab) < vocab_size:
         if len(pairs_counts) == 0:
