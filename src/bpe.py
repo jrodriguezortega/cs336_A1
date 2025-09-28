@@ -1,169 +1,21 @@
+import json
+import multiprocessing as mp
+import os
 from collections import defaultdict
 
 import regex as re
-import multiprocessing as mp
-import os
-import json
-
 from memory_profiler import profile
 
 from src.pretokenization import find_chunk_boundaries
-
-PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
-
-MAX_THREADS = 8
-
-
-def count_byte_pairs(pretoken: bytes, num_appaerances: int):
-    """Compute the count of byte-pairs for a byte sequence of a pre-token
-
-    Args:
-        bytes_seq (list(byte)): Sequence of bytes of a pre-token
-        num_appaerances (_type_): _description_
-
-    Returns:
-        _type_: _description_
-    """
-    counts = defaultdict(int)
-    for bytes_1, bytes_2 in zip(pretoken[:-1], pretoken[1:]):
-        counts[(bytes_1, bytes_2)] += num_appaerances
-
-    return counts
-
-
-def merge(pretoken_counts: dict[tuple[bytes], int], bytes_tuple: tuple[bytes]):
-    merge_pretoken_counts = defaultdict(int)
-    for pretoken, count in pretoken_counts.items():
-        new_pretoken = []
-        index_1, index_2 = 0, 1
-        while index_2 < len(pretoken):
-            bytes_1, bytes_2 = pretoken[index_1], pretoken[index_2]
-            if bytes_1 == bytes_tuple[0] and bytes_2 == bytes_tuple[1]:
-                new_pretoken.append(bytes_1 + bytes_2)
-                index_1 += 2
-                index_2 += 2
-            else:
-                new_pretoken.append(bytes_1)
-                index_1 += 1
-                index_2 += 1
-        if index_1 < len(pretoken):
-            new_pretoken.append(pretoken[index_1])
-        merge_pretoken_counts[tuple(new_pretoken)] = count
-
-    return merge_pretoken_counts
-
-
-def merge_efficient(
-    bytes_tuple: tuple[bytes],
-    pairs_counts: dict[tuple[bytes], int],
-    pairs_tokens: dict[tuple[bytes], dict[int, bool]],
-    idx_to_pretoken_counts: dict[int, dict],
-):
-    # Find the associated
-    associated_idxs = pairs_tokens[bytes_tuple].keys()
-    joined_bytes = bytes_tuple[0] + bytes_tuple[1]
-
-    sum_counts = 0
-    for idx in associated_idxs:
-        pretoken = idx_to_pretoken_counts[idx]["pretoken"]
-        counts = idx_to_pretoken_counts[idx]["counts"]
-        sum_counts += counts
-        new_pretoken = []
-        prev_pair = None
-        current_pair = None
-        next_pair = None
-        index_1, index_2 = 0, 1
-        while index_2 < len(pretoken):
-            current_pair = pretoken[index_1], pretoken[index_2]
-            if current_pair[0] == bytes_tuple[0] and current_pair[1] == bytes_tuple[1]:
-                # Select and update previous pair if possible
-                if index_1 > 0:
-                    prev_pair = pretoken[index_1 - 1], pretoken[index_1]
-
-                    # Update pair_counts
-                    pairs_counts[prev_pair] -= counts
-                    if pairs_counts[prev_pair] == 0:
-                        del pairs_counts[prev_pair]
-
-                # Select and update next pair if possible
-                if index_2 < (len(pretoken) - 1):
-                    next_pair = pretoken[index_2], pretoken[index_2 + 1]
-
-                    # Update pair_counts
-                    pairs_counts[next_pair] -= counts
-
-                    if pairs_counts[next_pair] == 0:
-                        del pairs_counts[next_pair]
-
-                new_pretoken.append(joined_bytes)
-                index_1 += 2
-                index_2 += 2
-            else:
-                new_pretoken.append(current_pair[0])
-                index_1 += 1
-                index_2 += 1
-
-        if index_1 < len(pretoken):
-            new_pretoken.append(pretoken[index_1])
-
-        new_pretoken = tuple(new_pretoken)
-        # Update pretoken
-        idx_to_pretoken_counts[idx]["pretoken"] = new_pretoken
-
-        # Compute counts for the new pretoken
-        for bytes_1, bytes_2 in zip(new_pretoken[:-1], new_pretoken[1:]):
-            if bytes_1 == joined_bytes or bytes_2 == joined_bytes:
-                pairs_counts[(bytes_1, bytes_2)] += counts
-                pairs_tokens[(bytes_1, bytes_2)][idx] = True
-
-    del pairs_counts[bytes_tuple]
-    del pairs_tokens[bytes_tuple]
-    return (pairs_counts, pairs_tokens, idx_to_pretoken_counts)
-
-
-def get_top_max_values(counts):
-    """Get top k maximum keys.
-
-    Args:
-        counts (dict[bytes, int]): Counts of the pretoken bytes.
-    Return:
-        list: List the maximum keys.
-    """
-
-    max_value = max(counts.values())
-
-    max_keys = [key for key in counts.keys() if counts[key] == max_value]
-
-    return max_keys
-
-
-def get_max_pair(counts: dict[tuple[int, int], int]):
-    pairs = get_top_max_values(counts)  # max(counts, key=counts.get)
-
-    return max(pairs)
-
-
-def transform_2_bytes(integer):
-    return bytes([integer])
-
-
-def get_bytes_tuple(string):
-    bytes_seq = list(string.encode("utf-8"))
-    list_bytes = []
-    for byte in bytes_seq:
-        list_bytes.append(bytes([byte]))
-
-    return tuple(list_bytes)
-
-
-def get_pretoken_count(text: str):
-    pretoken_counts = defaultdict(int)
-    if len(text) > 0:
-        for match in re.finditer(PAT, text):
-            string = match.group(0)
-            pretoken_counts[get_bytes_tuple(string)] += 1
-
-    return pretoken_counts
+from src.utils.constants import MAX_THREADS, PAT
+from src.utils.pretokenization import (
+    count_byte_pairs,
+    get_bytes_tuple,
+    get_max_pair,
+    get_pretoken_count,
+    merge,
+    merge_efficient,
+)
 
 
 def pretokenize_text(text, special_tokens):
@@ -178,7 +30,9 @@ def pretokenize_text(text, special_tokens):
     """
 
     # Get and remove special tokens before pre-tokenization
-    pattern = "|".join([re.escape(special_token) for special_token in special_tokens])
+    pattern = "|".join(
+        [re.escape(special_token) for special_token in special_tokens]
+    )
     split_text = re.split(pattern, text)
 
     pretoken_counts = defaultdict(int)  # dict[tuple(bytes), int]
@@ -204,7 +58,9 @@ def pretokenize_text_2(text, special_tokens):
         _type_: _description_
     """
     # Get and remove special tokens before pre-tokenization
-    pattern = "|".join([re.escape(special_token) for special_token in special_tokens])
+    pattern = "|".join(
+        [re.escape(special_token) for special_token in special_tokens]
+    )
     split_text = re.split(pattern, text)
 
     pretoken_counts = defaultdict(int)  # dict[tuple(bytes), int]
@@ -240,7 +96,10 @@ def pretokenize_text_binary(file_path, special_tokens):
 
             if len(chunks) == mp.cpu_count() or end == boundaries[-1]:
                 with mp.Pool(mp.cpu_count()) as p:
-                    small_pretoken_counts = p.starmap(pretokenize_text_2, [(chunk, special_tokens) for chunk in chunks])
+                    small_pretoken_counts = p.starmap(
+                        pretokenize_text_2,
+                        [(chunk, special_tokens) for chunk in chunks],
+                    )
 
                 for small_pretoken_count in small_pretoken_counts:
                     for pretoken, count in small_pretoken_count.items():
@@ -249,7 +108,8 @@ def pretokenize_text_binary(file_path, special_tokens):
                 chunks = []
 
     idx_to_pretoken_counts = {
-        idx: {"pretoken": pretoken, "counts": counts} for idx, (pretoken, counts) in enumerate(pretoken_counts.items())
+        idx: {"pretoken": pretoken, "counts": counts}
+        for idx, (pretoken, counts) in enumerate(pretoken_counts.items())
     }
     return idx_to_pretoken_counts
 
@@ -269,7 +129,9 @@ def pretokenize_text_parallel(file_path, special_tokens):
         text = f.read()
 
     # Get and remove special tokens before pre-tokenization
-    pattern = "|".join([re.escape(special_token) for special_token in special_tokens])
+    pattern = "|".join(
+        [re.escape(special_token) for special_token in special_tokens]
+    )
     split_text = re.split(pattern, text)
 
     # Pre-tokenize and obtain the initial pretoken_counts
@@ -282,7 +144,8 @@ def pretokenize_text_parallel(file_path, special_tokens):
             pretoken_counts[pretoken] += count
 
     idx_to_pretoken_counts = {
-        idx: {"pretoken": pretoken, "counts": counts} for idx, (pretoken, counts) in enumerate(pretoken_counts.items())
+        idx: {"pretoken": pretoken, "counts": counts}
+        for idx, (pretoken, counts) in enumerate(pretoken_counts.items())
     }
     return idx_to_pretoken_counts
 
@@ -348,9 +211,12 @@ def train_bpe(
         merges (list[tuple[bytes, bytes]]): The merges resulted from the training.
     """
 
+    print("Starting pre-tokenization")
     # idx_to_pretoken_counts = pretokenize_text_parallel(input_path, special_tokens)
-    idx_to_pretoken_counts = pretokenize_text_binary(input_path, special_tokens)
-
+    idx_to_pretoken_counts = pretokenize_text_binary(
+        input_path, special_tokens
+    )
+    print("End pretokenization")
     # Init vocab with ASCII character bytes and special tokens
     vocab = {}
     for idx, special_token in enumerate(special_tokens):
@@ -362,6 +228,7 @@ def train_bpe(
     merges: list[tuple[bytes]] = []
 
     # First count
+    print("Starting first count...")
     pairs_counts = defaultdict(int)
     pairs_tokens: dict[tuple[bytes], dict[int, bool]]
     pairs_tokens = defaultdict(dict)
@@ -373,8 +240,12 @@ def train_bpe(
             pairs_counts[byte_pair] += count
             pairs_tokens[byte_pair][idx] = True
 
+    print("Starting merging process...")
+
     # Merge pairs until you reach vocab_size vocabulary size
     while len(vocab) < vocab_size:
+        if len(vocab) % 100 == 0:
+            print(f"Current vocabulary length: {len(vocab)}")
         if len(pairs_counts) == 0:
             print("WARNING: No more possible symbol pairs")
             print(f"Maximum vocab size reached: {len(vocab)}")
@@ -393,7 +264,12 @@ def train_bpe(
     return vocab, merges
 
 
-def save_vocab_merges(vocab: dict[int, bytes], merges: list[tuple[bytes, bytes]], dir_path: str, name: str):
+def save_vocab_merges(
+    vocab: dict[int, bytes],
+    merges: list[tuple[bytes, bytes]],
+    dir_path: str,
+    name: str,
+):
     """Function to save vocabulary and merges of a trained BPE tokenizer
 
     Args:
@@ -409,7 +285,10 @@ def save_vocab_merges(vocab: dict[int, bytes], merges: list[tuple[bytes, bytes]]
     merges_txt_path = os.path.join(dir_path, f"{name}-merges.txt")
 
     with open(vocab_json_path, "w", encoding="utf-8") as f:
-        vocab_str = {str(vocab_item): vocab_idx for vocab_idx, vocab_item in vocab.items()}
+        vocab_str = {
+            str(vocab_item): vocab_idx
+            for vocab_idx, vocab_item in vocab.items()
+        }
         json.dump(vocab_str, f, indent=2)
 
     with open(merges_txt_path, "w", encoding="utf-8") as f:
@@ -417,16 +296,16 @@ def save_vocab_merges(vocab: dict[int, bytes], merges: list[tuple[bytes, bytes]]
             f.write(f"{str(merge)}\n")
 
 
-def read_vocab_merges(dir_path: str, name: str):
-    vocab_json_path = os.path.join(dir_path, f"{name}-vocab.json")
-    merges_txt_path = os.path.join(dir_path, f"{name}-merges.txt")
-
-    with open(vocab_json_path, "r", encoding="utf-8") as f:
+def read_vocab_merges(vocab_filepath: str, merges_filepath: str):
+    with open(vocab_filepath, mode="r", encoding="utf-8") as f:
         vocab_str_dict = json.load(f)
 
-        vocab = {vocab_idx: eval(vocab_str) for vocab_str, vocab_idx in vocab_str_dict.items()}
+        vocab = {
+            vocab_idx: eval(vocab_str)
+            for vocab_str, vocab_idx in vocab_str_dict.items()
+        }
 
-    with open(merges_txt_path, "r", encoding="utf-8") as f:
+    with open(merges_filepath, mode="r", encoding="utf-8") as f:
         # merges_lines = f.readlines()
         merges = []
         for line in f:

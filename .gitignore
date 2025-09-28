@@ -15,6 +15,8 @@ bpe_tokenizer/
 data/
 scripts/
 
+*.pdf
+
 # Distribution / packaging
 .Python
 build/
