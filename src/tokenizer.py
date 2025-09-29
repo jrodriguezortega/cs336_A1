@@ -79,12 +79,12 @@ class Tokenizer:
         Returns:
             list[int]: List of token ids.
         """
-        disallowed = re.findall(self.special_match, text)
+        # disallowed = re.findall(self.special_match, text)
 
-        if disallowed:
-            raise ValueError(
-                f"Disallowed special tokens encountered in text: {disallowed}"
-            )
+        # if disallowed:
+        #     raise ValueError(
+        #         f"Disallowed special tokens encountered in text: {disallowed}"
+        #     )
         pretokens = re.findall(PAT, text)
 
         text_ids = []
@@ -188,10 +188,13 @@ class Tokenizer:
 
         tokens_bytes = b""
         for token_id in ids:
-            # tokens_bytes.append(self.vocab[token_id])
             tokens_bytes = tokens_bytes + self.vocab[token_id]
 
-        return tokens_bytes.decode(encoding="utf-8")
+        try:
+            return tokens_bytes.decode(encoding="utf-8")
+        except UnicodeDecodeError:
+            # Fallback for partial UTF-8 sequences when decoding per-token
+            return tokens_bytes.decode(encoding="latin-1")
 
 
 if __name__ == "__main__":
@@ -205,6 +208,7 @@ if __name__ == "__main__":
 
     from tests.test_tokenizer import (
         test_roundtrip_unicode_string_with_special_tokens,
+        test_tinystories_sample_roundtrip,
     )
 
     # test_roundtrip_single_unicode_character()
