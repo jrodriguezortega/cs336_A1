@@ -6,7 +6,7 @@ from collections import defaultdict
 import regex as re
 from memory_profiler import profile
 
-from src.pretokenization import find_chunk_boundaries
+from src.utils.pretokenization import find_chunk_boundaries
 from src.utils.constants import MAX_THREADS, PAT
 from src.utils.pretokenization import (
     count_byte_pairs,
@@ -30,9 +30,7 @@ def pretokenize_text(text, special_tokens):
     """
 
     # Get and remove special tokens before pre-tokenization
-    pattern = "|".join(
-        [re.escape(special_token) for special_token in special_tokens]
-    )
+    pattern = "|".join([re.escape(special_token) for special_token in special_tokens])
     split_text = re.split(pattern, text)
 
     pretoken_counts = defaultdict(int)  # dict[tuple(bytes), int]
@@ -58,9 +56,7 @@ def pretokenize_text_2(text, special_tokens):
         _type_: _description_
     """
     # Get and remove special tokens before pre-tokenization
-    pattern = "|".join(
-        [re.escape(special_token) for special_token in special_tokens]
-    )
+    pattern = "|".join([re.escape(special_token) for special_token in special_tokens])
     split_text = re.split(pattern, text)
 
     pretoken_counts = defaultdict(int)  # dict[tuple(bytes), int]
@@ -108,8 +104,7 @@ def pretokenize_text_binary(file_path, special_tokens):
                 chunks = []
 
     idx_to_pretoken_counts = {
-        idx: {"pretoken": pretoken, "counts": counts}
-        for idx, (pretoken, counts) in enumerate(pretoken_counts.items())
+        idx: {"pretoken": pretoken, "counts": counts} for idx, (pretoken, counts) in enumerate(pretoken_counts.items())
     }
     return idx_to_pretoken_counts
 
@@ -129,9 +124,7 @@ def pretokenize_text_parallel(file_path, special_tokens):
         text = f.read()
 
     # Get and remove special tokens before pre-tokenization
-    pattern = "|".join(
-        [re.escape(special_token) for special_token in special_tokens]
-    )
+    pattern = "|".join([re.escape(special_token) for special_token in special_tokens])
     split_text = re.split(pattern, text)
 
     # Pre-tokenize and obtain the initial pretoken_counts
@@ -144,8 +137,7 @@ def pretokenize_text_parallel(file_path, special_tokens):
             pretoken_counts[pretoken] += count
 
     idx_to_pretoken_counts = {
-        idx: {"pretoken": pretoken, "counts": counts}
-        for idx, (pretoken, counts) in enumerate(pretoken_counts.items())
+        idx: {"pretoken": pretoken, "counts": counts} for idx, (pretoken, counts) in enumerate(pretoken_counts.items())
     }
     return idx_to_pretoken_counts
 
@@ -213,9 +205,7 @@ def train_bpe(
 
     print("Starting pre-tokenization")
     # idx_to_pretoken_counts = pretokenize_text_parallel(input_path, special_tokens)
-    idx_to_pretoken_counts = pretokenize_text_binary(
-        input_path, special_tokens
-    )
+    idx_to_pretoken_counts = pretokenize_text_binary(input_path, special_tokens)
     print("End pretokenization")
     # Init vocab with ASCII character bytes and special tokens
     vocab = {}
@@ -285,10 +275,7 @@ def save_vocab_merges(
     merges_txt_path = os.path.join(dir_path, f"{name}-merges.txt")
 
     with open(vocab_json_path, "w", encoding="utf-8") as f:
-        vocab_str = {
-            str(vocab_item): vocab_idx
-            for vocab_idx, vocab_item in vocab.items()
-        }
+        vocab_str = {str(vocab_item): vocab_idx for vocab_idx, vocab_item in vocab.items()}
         json.dump(vocab_str, f, indent=2)
 
     with open(merges_txt_path, "w", encoding="utf-8") as f:
@@ -300,10 +287,7 @@ def read_vocab_merges(vocab_filepath: str, merges_filepath: str):
     with open(vocab_filepath, mode="r", encoding="utf-8") as f:
         vocab_str_dict = json.load(f)
 
-        vocab = {
-            vocab_idx: eval(vocab_str)
-            for vocab_str, vocab_idx in vocab_str_dict.items()
-        }
+        vocab = {vocab_idx: eval(vocab_str) for vocab_str, vocab_idx in vocab_str_dict.items()}
 
     with open(merges_filepath, mode="r", encoding="utf-8") as f:
         # merges_lines = f.readlines()
