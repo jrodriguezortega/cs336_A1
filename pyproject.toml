@@ -22,6 +22,7 @@ dependencies = [
     "jupyter>=1.1.1",
     "pillow>=11.3.0",
     "ruff>=0.12.12",
+    "rootutils>=1.0.7",
 ]
 
 [build-system]
