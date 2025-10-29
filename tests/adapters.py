@@ -29,7 +29,12 @@ def run_linear(
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
 
-    raise NotImplementedError
+    from src.modules import Linear
+
+    layer = Linear(d_in, d_out)
+    layer.load_state_dict({"W": weights})
+
+    return layer(in_features)
 
 
 def run_embedding(
@@ -51,7 +56,13 @@ def run_embedding(
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
 
-    raise NotImplementedError
+    from src.modules import Embedding
+
+    emb_layer = Embedding(num_embedding=vocab_size, embedding_dim=d_model)
+
+    emb_layer.load_state_dict({"W": weights})
+
+    return emb_layer(token_ids)
 
 
 def run_swiglu(
@@ -83,7 +94,20 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+
+    from src.modules.ffn import FFN
+
+    ffn_layer = FFN(d_model, d_ff)
+
+    ffn_layer.l_1.W.data = w1_weight
+    ffn_layer.l_2.W.data = w2_weight
+    ffn_layer.l_3.W.data = w3_weight
+
+    # ffn_layer.load_state_dict(
+    #     {"l_1.W": w1_weight, "l_2.W": w2_weight, "l_3.W": w3_weight}
+    # )
+
+    return ffn_layer(in_features)
 
 
 def run_scaled_dot_product_attention(
@@ -378,7 +402,13 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    raise NotImplementedError
+    from src.modules import RMSNorm
+
+    layer_norm = RMSNorm(d_model, eps)
+
+    layer_norm.load_state_dict({"g": weights})
+
+    return layer_norm(in_features)
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
@@ -392,7 +422,9 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    raise NotImplementedError
+    from src.modules.ffn import silu
+
+    return silu(in_features)
 
 
 def run_get_batch(
