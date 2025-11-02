@@ -25,7 +25,18 @@ def scaled_dot_product_attention(
     k: Float[torch.Tensor, "b ... seq_len d_k"],
     v: Float[torch.Tensor, "b ... seq_len d_v"],
     mask: Float[torch.Tensor, "seq_len seq_len"] | None = None,
-):
+) -> Float[torch.Tensor, "b ... seq_len d_v"]:
+    """Function to compute the scaled dot product attention.
+
+    Args:
+        q (Float[torch.Tensor, &quot;b ... seq_len d_k&quot;]): Query matrix.
+        k (Float[torch.Tensor, &quot;b ... seq_len d_k&quot;]): Key matrix.
+        v (Float[torch.Tensor, &quot;b ... seq_len d_v&quot;]): Value matrix.
+        mask (Float[torch.Tensor, &quot;seq_len seq_len&quot;] | None, optional): Causal attention mask. Defaults to None.
+
+    Returns:
+        Float[torch.Tensor, "b ... seq_len d_v"]: Attention-weigthed values.
+    """
     *rest, d_k = q.shape
     presoftmax = einsum(
         q,
