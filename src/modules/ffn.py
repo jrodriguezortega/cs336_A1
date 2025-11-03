@@ -10,7 +10,7 @@ if __name__ == "__main__":
     rootutils.setup_root(__file__, pythonpath=True)
 
 
-from src.modules import Linear
+from src.modules.linear import Linear
 
 
 def silu(
