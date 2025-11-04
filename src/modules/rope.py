@@ -67,27 +67,33 @@ class RotaryPositionEmbedding(nn.Module):
         x: Float[torch.Tensor, "... seq_len d_k"],
         token_positions: Int[torch.Tensor, "... seq_len"],
     ):
+        *_, seq_len, _ = x.shape
+
+        rot_matrices = self.rot_matrices[:seq_len]
         x = rearrange(
             x, "... seq_len (d_k_2 dim) -> ... seq_len d_k_2 dim ", dim=2
         )
 
-        *rest, seq_len, d_k = x.shape
+        *rest, d_k_2, dim = x.shape
 
         idx = (
             token_positions.unsqueeze(-1)
             .unsqueeze(-1)
-            .expand(*rest, seq_len, d_k)
+            .expand(*rest, d_k_2, dim)
         )
-        reordered = torch.gather(x, dim=1, index=idx)
+        reordered = torch.gather(x, dim=len(rest) - 1, index=idx)
+
+        print(f"self.rot_matrices.shape: {self.rot_matrices.shape}")
+        print(f"reordered.shape: {reordered.shape}")
 
         rotated = einsum(
-            self.rot_matrices,
+            rot_matrices,
             reordered,
             "seq_len d_k2 dim1 dim2, ... seq_len d_k2 dim2 -> ... seq_len d_k2 dim1",
         )
 
         return rearrange(
-            rotated, "b seq_len d_k2 dim1 -> b seq_len (d_k2 dim1)"
+            rotated, "... seq_len d_k2 dim1 ->... seq_len (d_k2 dim1)"
         )
 
 
