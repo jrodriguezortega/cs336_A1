@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+from jaxtyping import Float, Int
+from torch import Tensor
 
 
 class Embedding(nn.Module):
@@ -32,7 +34,9 @@ class Embedding(nn.Module):
         nn.init.trunc_normal_(W, mean=0, std=1, a=-3, b=3)
         self.W = nn.Parameter(W)
 
-    def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, token_ids: Int[Tensor, "b seq_len"]
+    ) -> Float[Tensor, "b seq_len embedding_dim"]:
         return self.W[token_ids]
 
 

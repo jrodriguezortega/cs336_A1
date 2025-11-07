@@ -8,6 +8,7 @@ import numpy.typing as npt
 import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
+from torch.distributions import Transform
 
 
 def run_linear(
@@ -228,10 +229,10 @@ def run_multihead_self_attention_with_rope(
 
     mh_layer.load_state_dict(
         {
-            "Q.W": q_proj_weight,
-            "K.W": k_proj_weight,
-            "V.W": v_proj_weight,
-            "O.W": o_proj_weight,
+            "q_proj.W": q_proj_weight,
+            "k_proj.W": k_proj_weight,
+            "v_proj.W": v_proj_weight,
+            "output_proj.W": o_proj_weight,
         }
     )
 
@@ -336,7 +337,25 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    from src.modules import Block
+
+    block_layer = Block(d_model, num_heads, max_seq_len, theta, d_ff)
+
+    block_layer.load_state_dict(
+        {
+            "mha.q_proj.W": weights["attn.q_proj.weight"],
+            "mha.k_proj.W": weights["attn.k_proj.weight"],
+            "mha.v_proj.W": weights["attn.v_proj.weight"],
+            "mha.output_proj.W": weights["attn.output_proj.weight"],
+            "rms_norm1.g": weights["ln1.weight"],
+            "rms_norm2.g": weights["ln2.weight"],
+            "ffn.l_1.W": weights["ffn.w1.weight"],
+            "ffn.l_2.W": weights["ffn.w2.weight"],
+            "ffn.l_3.W": weights["ffn.w3.weight"],
+        }
+    )
+
+    return block_layer(in_features)
 
 
 def run_transformer_lm(
@@ -418,7 +437,56 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    from src.modules.transformer import Transformer
+
+    transformer_layer = Transformer(
+        vocab_size,
+        context_length,
+        num_layers,
+        num_heads,
+        d_model,
+        rope_theta,
+        d_ff=d_ff,
+    )
+
+    state_dict = {
+        "token_embeddings.W": weights["token_embeddings.weight"],
+        "ln_final.g": weights["ln_final.weight"],
+        "lm_head.W": weights["lm_head.weight"],
+    }
+
+    for i in range(num_layers):
+        state_dict[f"blocks.{i}.mha.q_proj.W"] = weights[
+            f"layers.{i}.attn.q_proj.weight"
+        ]
+        state_dict[f"blocks.{i}.mha.k_proj.W"] = weights[
+            f"layers.{i}.attn.k_proj.weight"
+        ]
+        state_dict[f"blocks.{i}.mha.v_proj.W"] = weights[
+            f"layers.{i}.attn.v_proj.weight"
+        ]
+        state_dict[f"blocks.{i}.mha.output_proj.W"] = weights[
+            f"layers.{i}.attn.output_proj.weight"
+        ]
+        state_dict[f"blocks.{i}.rms_norm1.g"] = weights[
+            f"layers.{i}.ln1.weight"
+        ]
+        state_dict[f"blocks.{i}.rms_norm2.g"] = weights[
+            f"layers.{i}.ln2.weight"
+        ]
+        state_dict[f"blocks.{i}.ffn.l_1.W"] = weights[
+            f"layers.{i}.ffn.w1.weight"
+        ]
+        state_dict[f"blocks.{i}.ffn.l_2.W"] = weights[
+            f"layers.{i}.ffn.w2.weight"
+        ]
+        state_dict[f"blocks.{i}.ffn.l_3.W"] = weights[
+            f"layers.{i}.ffn.w3.weight"
+        ]
+
+    transformer_layer.load_state_dict(state_dict)
+
+    return transformer_layer(in_indices)
 
 
 def run_rmsnorm(

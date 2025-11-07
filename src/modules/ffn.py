@@ -40,8 +40,8 @@ class FFN(nn.Module):
             print(f"WARNING: d_ff ({self.d_ff}) is not divisible by 64")
 
         self.l_1 = Linear(self.d_model, self.d_ff, device=device, dtype=dtype)
-        self.l_3 = Linear(self.d_model, self.d_ff, device=device, dtype=dtype)
         self.l_2 = Linear(self.d_ff, self.d_model, device=device, dtype=dtype)
+        self.l_3 = Linear(self.d_model, self.d_ff, device=device, dtype=dtype)
 
     def forward(
         self,

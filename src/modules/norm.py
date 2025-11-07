@@ -19,16 +19,16 @@ class RMSNorm(nn.Module):
         self.g = nn.Parameter(torch.ones(d_model, device=device, dtype=dtype))
 
     def forward(
-        self, x: Float[torch.Tensor, "b seq_len d_out"]
-    ) -> Float[torch.Tensor, "b seq_len d_out"]:
+        self, x: Float[torch.Tensor, "... seq_len d_out"]
+    ) -> Float[torch.Tensor, "... seq_len d_out"]:
         in_dtype = x.dtype
         x = x.to(torch.float32)
 
-        rms: Float[torch.Tensor, "b seq_len"] = torch.sqrt(
+        rms: Float[torch.Tensor, "... seq_len"] = torch.sqrt(
             (einsum(torch.pow(x, 2), "... d_model -> ... ") / self.d_model)
             + self.eps
         )
-        norm: Float[torch.Tensor, "b seq_len d_out"] = x / rms.unsqueeze(-1)
+        norm: Float[torch.Tensor, "... seq_len d_out"] = x / rms.unsqueeze(-1)
 
         return einsum(norm, self.g, "... d_model, d_model -> ... d_model").to(
             in_dtype

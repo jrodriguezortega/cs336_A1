@@ -81,10 +81,10 @@ class MultiHeadAttention(nn.Module):
         self.d_k = self.d_v = int(d_model / num_heads)
         self.num_heads = num_heads
 
-        self.Q = Linear(d_model, d_model, device, dtype)
-        self.K = Linear(d_model, d_model, device, dtype)
-        self.V = Linear(d_model, d_model, device, dtype)
-        self.O = Linear(d_model, d_model, device, dtype)
+        self.q_proj = Linear(d_model, d_model, device, dtype)
+        self.k_proj = Linear(d_model, d_model, device, dtype)
+        self.v_proj = Linear(d_model, d_model, device, dtype)
+        self.output_proj = Linear(d_model, d_model, device, dtype)
         self.rope = None
 
         if theta is not None:
@@ -97,10 +97,10 @@ class MultiHeadAttention(nn.Module):
 
     def forward(
         self,
-        x: Float[torch.Tensor, "... seq_len d_model"],
-        token_positions: Int[torch.Tensor, "... seq_len"] | None = None,
+        x: Float[torch.Tensor, "b seq_len d_model"],
+        token_positions: Int[torch.Tensor, "b seq_len"] | None = None,
     ):
-        q, k, v = self.Q(x), self.K(x), self.V(x)
+        q, k, v = self.q_proj(x), self.k_proj(x), self.v_proj(x)
 
         _, seq_len, _ = x.shape
 
@@ -132,7 +132,7 @@ class MultiHeadAttention(nn.Module):
             att_output, "b num_heads seq_len d_k -> b seq_len (num_heads d_k)"
         )
 
-        return self.O(att_output)
+        return self.output_proj(att_output)
 
 
 if __name__ == "__main__":
@@ -149,10 +149,10 @@ if __name__ == "__main__":
     x = torch.rand(size=(b, seq_len, d_model))
     token_positions = torch.arange(seq_len).unsqueeze(0)
 
-    mh_layer = MultiHeadAttention(d_model, num_heads)
-    mh_out = mh_layer(x)
-    print(mh_out.shape)
+    mha_layer = MultiHeadAttention(d_model, num_heads)
+    mha_out = mha_layer(x)
+    print(mha_out.shape)
 
-    mh_layer = MultiHeadAttention(d_model, num_heads, 10000, seq_len)
-    mh_out = mh_layer(x, token_positions)
-    print(mh_out.shape)
+    mha_layer = MultiHeadAttention(d_model, num_heads, 10000, seq_len)
+    mha_out = mha_layer(x, token_positions)
+    print(mha_out.shape)
