@@ -171,10 +171,10 @@ def run_multihead_self_attention(
 
     mh_layer.load_state_dict(
         {
-            "Q.W": q_proj_weight,
-            "K.W": k_proj_weight,
-            "V.W": v_proj_weight,
-            "O.W": o_proj_weight,
+            "q_proj.W": q_proj_weight,
+            "k_proj.W": k_proj_weight,
+            "v_proj.W": v_proj_weight,
+            "output_proj.W": o_proj_weight,
         }
     )
 
@@ -219,11 +219,6 @@ def run_multihead_self_attention_with_rope(
         implementation with the given QKV projection weights and input features.
     """
     from src.modules.attention import MultiHeadAttention
-
-    print(f"max_seq_len: {max_seq_len}")
-    print(f"in_features.shape: {in_features.shape}")
-    print(f"token_positions.shape: {token_positions.shape}")
-    print(token_positions)
 
     mh_layer = MultiHeadAttention(d_model, num_heads, theta, max_seq_len)
 

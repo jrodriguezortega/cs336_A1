@@ -69,6 +69,7 @@ class MultiHeadAttention(nn.Module):
         num_heads: int,
         theta: float | None = None,
         max_seq_len: int | None = None,
+        rope: RotaryPositionEmbedding | None = None,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
     ):
@@ -85,9 +86,9 @@ class MultiHeadAttention(nn.Module):
         self.k_proj = Linear(d_model, d_model, device, dtype)
         self.v_proj = Linear(d_model, d_model, device, dtype)
         self.output_proj = Linear(d_model, d_model, device, dtype)
-        self.rope = None
+        self.rope = rope
 
-        if theta is not None:
+        if self.rope is None and theta is not None:
             self.rope = RotaryPositionEmbedding(
                 theta=theta,
                 d_k=self.d_k,

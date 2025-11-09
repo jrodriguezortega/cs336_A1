@@ -2,7 +2,6 @@ from typing import OrderedDict, Self
 
 import torch
 import torch.nn as nn
-from einops import einsum, rearrange
 from jaxtyping import Float, Int
 from torch import Tensor
 
@@ -11,6 +10,7 @@ from src.modules.embedding import Embedding
 from src.modules.ffn import FFN
 from src.modules.linear import Linear
 from src.modules.norm import RMSNorm
+from src.modules.rope import RotaryPositionEmbedding
 
 
 class Block(nn.Module):
@@ -19,10 +19,11 @@ class Block(nn.Module):
         d_model: int,
         num_heads: int,
         max_seq_len: int,
-        theta: float,
+        theta: float | None = None,
         d_ff: int | None = None,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
+        rope: RotaryPositionEmbedding | None = None,
     ) -> None:
         super().__init__()
 
@@ -33,6 +34,7 @@ class Block(nn.Module):
             max_seq_len=max_seq_len,
             device=device,
             dtype=dtype,
+            rope=rope,
         )
 
         self.ffn = FFN(d_model, d_ff, device=device, dtype=dtype)
@@ -67,6 +69,17 @@ class Transformer(nn.Module):
     ) -> None:
         super().__init__()
 
+        # Use the same rope layer for each block
+        self.d_model = d_model
+        self.d_k = self.d_v = int(d_model / num_heads)
+        if theta is not None:
+            self.rope = RotaryPositionEmbedding(
+                theta=theta,
+                d_k=self.d_k,
+                max_seq_len=context_length,
+                device=device,
+            )
+
         self.num_layers = num_layers
 
         self.token_embeddings = Embedding(
@@ -76,13 +89,13 @@ class Transformer(nn.Module):
         self.blocks = nn.Sequential(
             *[
                 Block(
-                    d_model,
-                    num_heads,
-                    context_length,
-                    theta,
-                    d_ff,
-                    device,
-                    dtype,
+                    d_model=d_model,
+                    num_heads=num_heads,
+                    max_seq_len=context_length,
+                    rope=self.rope,
+                    d_ff=d_ff,
+                    device=device,
+                    dtype=dtype,
                 )
                 for _ in range(num_layers)
             ]
@@ -91,6 +104,12 @@ class Transformer(nn.Module):
         self.ln_final = RMSNorm(d_model, eps, device, dtype)
 
         self.lm_head = Linear(d_model, vocab_size, device, dtype)
+
+        # Rope to be used across all layers
+        if d_model % num_heads != 0:
+            raise ValueError(
+                f"d_model ({d_model}) should be divisible by num_heads ({num_heads}): {d_model / num_heads:.2f}"
+            )
 
     def forward(
         self, token_ids: Int[Tensor, "b seq_len"]
