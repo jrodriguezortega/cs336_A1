@@ -6,6 +6,12 @@ from torch import Tensor
 from src.modules.attention import softmax
 
 
+def perplexity(
+    ce_losses: Float[Tensor, "... seq_len"],
+) -> Float[Tensor, "..."]:
+    return torch.exp(ce_losses.mean(dim=-1))
+
+
 def cross_entropy_loss(
     logits: Float[Tensor, "... seq_len vocab_size"],
     targets: Float[Tensor, "... seq_len"],
